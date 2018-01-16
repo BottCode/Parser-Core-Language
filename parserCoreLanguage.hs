@@ -150,7 +150,7 @@ token p = do space
              return v
 
 -- parse an identifier ignoring spacing around it
--- parse identifier " width      =   10"  =  [("width","= 10")]
+-- parse identifier "   width    =  10"  =  [("width","= 10")]
 identifier :: Parser String
 identifier = token ident
 
@@ -199,7 +199,7 @@ data Expr a = EVar Name
             | ELam [a] (Expr a)
             deriving Show
 
-{--parseProg :: Parser (Program Name)
+parseProg :: Parser (Program Name)
 parseProg = do p <- parseScDef
                do character ';'
                   ps <- parseProg
@@ -207,19 +207,37 @@ parseProg = do p <- parseScDef
                <|> return [p]   
 
 parseScDef :: Parser (ScDef Name)
-parseScDef = do v <- parseVar
-                pf <- many parseVar
+parseScDef = do v <- identifier
+                pf <- many identifier
                 character '='
                 body <- parseExpr -- call to parseExpr
                 return (v,pf,body)
 -- it is for the following cases: let, letrec, case, lambda and aexpr.
 parseExpr :: Parser (Expr Name)
+parseExpr = parseLet <|> parseLetRec
+
+parseLet :: Parser (Expr Name) -- let is something like "let var1 = expr1; var2 = expr2; in expr0;"
+parseLet = do symbol "let"
+              defns <- some parseDef
+              symbol "in"
+              e <- parseExpr
+              return (ELet NonRecursive defns e)
+
+parseLetRec :: Parser (Expr Name) -- 
+parseLetRec = parseLet
+
+parseCase :: Parser (Expr Name)
+parseCase = 
 
 -- -- it's used by parseExpr for parsing AExpr
-parseAExpr :: Parser (Expr Name)
+--parseAExpr :: Parser (Expr Name)
 
 -- it's used by parseExpr for Def (let and letrec)
 parseDef :: Parser (Def Name)
+parseDef = do var <- identifiers
+              symbol "="
+              e <- parseExpr
+              return (var,e)
 
 -- it's used by parseExpr for Alter (case)
 parseAlt :: Parser (Alter Name)--}
