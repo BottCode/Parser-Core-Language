@@ -1,5 +1,9 @@
+module ParserCoreLanguage where
+
 import Control.Applicative
+import Control.Monad
 import Data.Char
+import System.IO
 
 newtype Parser a = P (String -> [(a,String)])
 
@@ -136,3 +140,57 @@ integer = token int
 symbol :: String -> Parser String
 symbol xs = token (string xs)
 
+-- LET'S START WITH THE PARSER
+
+type Program a = [ScDefn a]
+
+type CoreProgram = Program Name
+
+type ScDefn a = (Name,[a],Expr a)
+
+type CoreScDefn = ScDefn Name
+
+type Name = String
+
+type Def a = (a, Expr a) -- for let and letrec
+
+type Alter a = (Int, [a], Expr a) -- for case
+
+data IsRec = NonRecursive | Recursive
+             deriving Show
+
+data Expr a = EVar Name
+            | ENum Int
+            | EConstr Int Int
+            | EAp (Expr a) (Expr a)
+            | ELet
+                IsRec
+                [Def a]
+                (Expr a)
+            | ECase
+                (Expr a)
+                [Alter a]
+            | ELam [a] (Expr a)
+            deriving Show
+
+{--parseProg :: Parser (Program Name)
+parseProg = do p <- parseScDef
+               do character ';'
+                  ps <- parseProg
+                  return (p:ps)
+               <|> return [p]   
+
+parseScDef :: Parser (ScDef Name)
+parseScDef = do v <- parseVar
+                pf <- many parseVar
+                character '='
+                body <- parseExpr -- call to parseExpr
+                return (v,pf,body)
+
+parseExpr :: Parser (Expr Name)
+
+parseAExpr :: Parser (Expr Name)
+
+parseDef :: Parser (Def Name)
+
+parseAlt :: Parser (Alter Name)--}
