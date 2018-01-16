@@ -46,13 +46,15 @@ three = pure g <*> item <*> item <*> item
 --}
 
 -- Monadic version
+-- it consumes three characters, discard the second, and returns the first and the third as a pair
+-- parse three "abcdef"  =  [(('a','c'),"def")]
 three :: Parser (Char,Char)
 three = do x <- item 
            item
            z <- item
            return (x,z)
 
-{-- reminf Maybe as an Alternative
+{-- remind Maybe as an Alternative
     instance Alternative Maybe where 
         -- empty :: Maybe a
         empty = Nothing
@@ -71,14 +73,24 @@ instance Alternative Parser where
               [] -> parse q inp
               [(v,out)] -> [(v,out)])
 
+
+-- Derived Primitive
+-- item, return and empty are three basic parser. In combination with sequencing and choice,
+-- these primitive can be used to efine a number of other useful parsers
+
+-- It returns a parser iff predicate p is true
+-- parse (sat (=='a')) "abc"  =  [('a',"bc")]
 sat :: (Char -> Bool) -> Parser Char
 sat p = do x <- item
            if (p x) 
                then return x 
                else empty
 
+-- return a parser iff the first character is a number
+-- parse digit "12abc"  =  [('1',"2abc")]
 digit :: Parser Char
 digit = sat isDigit
+
 
 lower :: Parser Char
 lower = sat isLower
@@ -95,25 +107,33 @@ alphanum = sat isAlphaNum
 char :: Char -> Parser Char
 char x = sat (== x)
 
+-- return a parser iff the string is at the beginning of the param
+-- parse (string "ab") "abc"  =  [("ab","c")]
+-- parse (string "ab") "aab"  =  []
 string :: String -> Parser String
 string [] = return []
 string (x:xs) = do char x
                    string xs
                    return (x:xs)
-
+-- parse an identifier (variable name)
+-- parse ident "width = 10"  =  [("width"," = 10")]
 ident :: Parser String
 ident = do x <- lower
            xs <- many alphanum
            return (x:xs)
 
+-- parse a natural number
+-- parse nat "18 * 23"  =  [(18," * 23")]
 nat :: Parser Int
 nat = do xs <- some digit
          return (read xs)
 
+-- parse a space
 space :: Parser ()
 space = do many (sat isSpace)
            return ()
 
+-- parse an integer
 int :: Parser Int 
 int = do char '-'
          n <- nat
@@ -122,12 +142,15 @@ int = do char '-'
 
 -- HANDLING SPACING
 
+-- it allows to ignore any space before and after applying a parser for a token
 token :: Parser a -> Parser a
 token p = do space
              v <- p 
              space 
              return v
 
+-- parse an identifier ignoring spacing around it
+-- parse identifier " width      =   10"  =  [("width","= 10")]
 identifier :: Parser String
 identifier = token ident
 
@@ -142,10 +165,12 @@ symbol xs = token (string xs)
 
 -- LET'S START WITH THE PARSER
 
+-- A core-language program is just a list of supercombinatoric definitions
 type Program a = [ScDefn a]
 
 type CoreProgram = Program Name
 
+-- a supercombinatoric definition contains the name of the supercombinator, its arguments and its body
 type ScDefn a = (Name,[a],Expr a)
 
 type CoreScDefn = ScDefn Name
@@ -156,6 +181,7 @@ type Def a = (a, Expr a) -- for let and letrec
 
 type Alter a = (Int, [a], Expr a) -- for case
 
+-- in Expr using IsRec you use the constructor ELet for modelling both let and letrec
 data IsRec = NonRecursive | Recursive
              deriving Show
 
@@ -186,11 +212,14 @@ parseScDef = do v <- parseVar
                 character '='
                 body <- parseExpr -- call to parseExpr
                 return (v,pf,body)
-
+-- it is for the following cases: let, letrec, case, lambda and aexpr.
 parseExpr :: Parser (Expr Name)
 
+-- -- it's used by parseExpr for parsing AExpr
 parseAExpr :: Parser (Expr Name)
 
+-- it's used by parseExpr for Def (let and letrec)
 parseDef :: Parser (Def Name)
 
+-- it's used by parseExpr for Alter (case)
 parseAlt :: Parser (Alter Name)--}
