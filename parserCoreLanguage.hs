@@ -239,5 +239,15 @@ parseDef = do var <- identifiers
               e <- parseExpr
               return (var,e)
 
+parseListAlt :: Parser ([Alter Name])
+parseListAlt = return (many parseAlt)
+
 -- it's used by parseExpr for Alter (case)
-parseAlt :: Parser (Alter Name)--}
+parseAlt :: Parser (Alter Name)
+parseAlt = do symbol "<"
+              num <- integer
+              symbol ">"
+              vars <- many identifier
+              symbol "->"
+              e <- parseExpr
+              return (num,vars,e)
