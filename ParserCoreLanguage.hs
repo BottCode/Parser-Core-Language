@@ -243,12 +243,12 @@ parseCase :: Parser (Expr Name)
 parseCase = do symbol "case"
                e <- parseExpr
                symbol "of"
-               alts <- parseAlts
+               alts <- parseMoreAlt
                return (ECase e alts)
 
 parseLambda :: Parser (Expr Name)
 parseLambda = do symbol "\\"
-                 var <- identifier
+                 var <- some identifier
                  symbol "."
                  e <- parseExpr
                  return (ELam var e)
