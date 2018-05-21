@@ -207,19 +207,21 @@ data Expr a = EVar Name
             | ELam [a] (Expr a)
             deriving Show
 
+-- parser per progamma
 parseProg :: Parser (Program Name)
 parseProg = do p <- parseScDef
                do symbol ";"
                   ps <- parseProg
                   return (p:ps)
-                <|> return [p]   
+                  <|> return [p]
 
+-- parser per supercombinator
 parseScDef :: Parser (ScDefn Name)
 parseScDef = do v <- identifier
                 pf <- many identifier
-                symbol ";"
-                body <- parseExpr -- call to parseExpr
-                return (v,pf,body)
+                char '='
+                body <- parseExpr
+                return (v, pf, body)
                 
 -- it is for the following cases: let, letrec, case, lambda and aexpr.
 parseExpr :: Parser (Expr Name)
@@ -243,10 +245,10 @@ parseCase :: Parser (Expr Name)
 parseCase = do symbol "case"
                e <- parseExpr
                symbol "of"
-               alts <- parseMoreAlt
+               alts <- parseMoreAlts
                return (ECase e alts)
 
-parseLambda :: Parser (Expr Name)
+parseLambda :: Parser (Expr Name)   
 parseLambda = do symbol "\\"
                  var <- some identifier
                  symbol "."
@@ -254,40 +256,40 @@ parseLambda = do symbol "\\"
                  return (ELam var e)
 
 parseAExpr :: Parser (Expr Name)
-parseAExpr = do var <- identifier
-                return (EVar var)
+parseAExpr = parseVar <|> parseNum <|> parsePack <|> parseParenthesisedExpr
 
-             <|> 
+parseVar :: Parser (Expr Name)
+parseVar = do var <- identifier
+              return (EVar var)
 
-             do num <- integer
-                return (ENum num)
+parseNum :: Parser (Expr Name)
+parseNum = do num <- integer
+              return (ENum num)     
 
-             <|>
+parsePack :: Parser (Expr Name)
+parsePack = do symbol "Pack"
+               symbol "{"
+               tag <- integer
+               symbol ","
+               arity <- integer
+               symbol "}"
+               return (EConstr tag arity)
 
-             do symbol "Pack"
-                symbol "{"
-                tag <- integer
-                symbol ","
-                arity <- integer
-                symbol "}"
-                return (EConstr tag arity)
-            
-             <|>
+parseParenthesisedExpr :: Parser (Expr Name)
+parseParenthesisedExpr = do symbol "("
+                            e <- parseExpr
+                            symbol ")"
+                            return e
 
-             do symbol "("
-                e <- parseExpr
-                symbol ")"
-                return e
+parseMoreAlts :: Parser [(Alter Name)]
+parseMoreAlts = do alt <- parseAlt
+                   do symbol ";"
+                      remaining_alts <- parseMoreAlts
+                      return (alt:remaining_alts)
+                      <|>
+                      return [alt]
 
-parseMoreAlt :: Parser [(Alter Name)]
-parseMoreAlt = do alt <- parseAlt
-                  do symbol ";"
-                     altl <- parseMoreAlt
-                     return (alt:altl)
-                     <|>
-                     return [alt]
-
---parser per il singolo alt, ritorna una tripla con numero, variabili ed espressione
+-- parser per il singolo alt, ritorna una tripla con numero, variabili ed espressione
 parseAlt :: Parser (Alter Name)
 parseAlt = do symbol "<"
               num <- integer
@@ -298,12 +300,13 @@ parseAlt = do symbol "<"
               return (num, var, e)
 
 
--- Parse a "Definition". It's used by parseExpr for Def (let and letrec).
+-- Parse a "Definition". It's used by parseLet and parseLetRec for Def (let and letrec).
 parseDef :: Parser (Def Name)
-parseDef = do var <- identifier
+parseDef = do x <- identifier
               symbol "="
-              e <- parseExpr
-              return (var,e)
+              expr <- parseExpr
+              do many (symbol ";")
+                 return (x,expr)
 
 
 
