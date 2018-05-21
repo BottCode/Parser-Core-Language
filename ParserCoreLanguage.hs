@@ -308,7 +308,56 @@ parseDef = do x <- identifier
               do many (symbol ";")
                  return (x,expr)
 
+parseExpr1 :: Parser (Expr Name)
+parseExpr1 = do left <- parseExpr2
+                do symbol "|"
+                   right <- parseExpr1
+                   return (EAp (EAp (EVar "|") left) right)
+                   <|> 
+                   return left 
 
+parseExpr2 :: Parser (Expr Name)
+parseExpr2 = do left <- parseExpr3
+                do symbol "&"
+                   right <- parseExpr2
+                   return (EAp (EAp (EVar "|") left) right)
+                   <|>
+                   return left
 
+parseExpr3 :: Parser (Expr Name)
+parseExpr3 = do left <- parseExpr4
+                do relop <- parseRelOp
+                   right <- parseExpr4
+                   return (EAp(EAp (EVar relop) left) right) 
+                   <|>
+                   return left
 
+-- used in parseExpr3
+parseRelOp :: Parser Name
+parseRelOp = symbol "<" <|> symbol "<=" <|> symbol "==" <|> symbol "~=" <|> symbol ">=" <|> symbol ">"
 
+parseExpr4 :: Parser (Expr Name)
+parseExpr4 = do left <- parseExpr5
+                do symbol "+"
+                   right <- parseExpr4
+                   return (EAp (EAp (EVar "+") left) right)
+                   <|>
+                   do symbol "-"
+                      right <- parseExpr5
+                      return (EAp (EAp (EVar "-") left) right)
+                      <|> 
+                      return left
+
+parseExpr5 :: Parser (Expr Name)
+parseExpr5 = do left <- parseExpr6
+                do symbol "*"
+                   right <- parseExpr5
+                   return (EAp (EAp (EVar "*") left) right)
+                 <|> do symbol "/"
+                        right <- parseExpr6
+                        return (EAp(EAp (EVar "/") left) right)
+                 <|> return left
+
+parseExpr6 :: Parser (Expr Name)
+parseExpr6 = parseExpr5 -- TODO
+               
