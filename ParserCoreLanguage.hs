@@ -4,6 +4,8 @@ import Control.Monad
 import Data.Char
 import System.IO
 
+import Debug.Trace
+
 newtype Parser a = P (String -> [(a,String)])
 
 instance Functor Parser where
@@ -34,8 +36,8 @@ parse (P p) inp = p inp
 -- it fails if input string is empty. Otherwhise succeeds with the first Char as the result value
 item :: Parser Char
 item = P (\inp -> case inp of
-    [] -> []
-    (x:xs) -> [(x,xs)])
+                    [] -> []
+                    (x:xs) -> [(x,xs)])
 
 {--
 -- it consumes three characters, discard the second, and returns the first and the third as a pair
@@ -90,13 +92,13 @@ sat p = do x <- item
 digit :: Parser Char
 digit = sat isDigit
 
-
 lower :: Parser Char
 lower = sat isLower
 
 upper :: Parser Char
 upper = sat isUpper
 
+-- check if the character is an alphabetic character
 letter :: Parser Char
 letter = sat isAlpha
 
@@ -115,13 +117,6 @@ string (x:xs) = do char x
                    string xs
                    return (x:xs)
 
--- parse an identifier (variable name)
--- parse ident "width = 10"  =  [("width"," = 10")]
-ident :: Parser String
-ident = do x <- lower
-           xs <- many alphanum
-           return (x:xs)
-
 -- parse a natural number
 -- parse nat "18 * 23"  =  [(18," * 23")]
 nat :: Parser Int
@@ -133,13 +128,6 @@ space :: Parser ()
 space = do many (sat isSpace)
            return ()
 
--- parse an integer
-int :: Parser Int 
-int = do char '-'
-         n <- nat
-         return (-n)
-    <|> nat
-
 -- HANDLING SPACING
 
 -- it allows to ignore any space before and after applying a parser for a token
@@ -149,16 +137,37 @@ token p = do space
              space 
              return v
 
--- parse an identifier ignoring spacing around it
--- parse identifier "   width    =  10"  =  [("width","= 10")]
-identifier :: Parser String
-identifier = token ident
+varch :: Parser Char
+varch = do alpha <- letter
+           return alpha
+        <|>
+        do numeral <- digit
+           return numeral
+        <|>
+        do underscore <- char '_'
+           return underscore
+
+-- this is the actual variables parsing.
+-- grammar: var -> alphaChar varch_1...varch_n
+-- where varch_x is -> alpha | digit | _
+ident :: Parser Name
+ident = do x <- letter -- an alphabetic character
+           xs <- many varch -- alpha | digit | _
+           if isKeyWord (x:xs)
+            then empty
+            else return (x:xs)
+
+checkParseVar :: Parser Name
+checkParseVar = token ident
 
 natural :: Parser Int
 natural = token nat
 
 integer :: Parser Int
-integer = token int
+integer = do token (char '-')
+             n <- token nat
+             return (-n)
+          <|> token nat
 
 symbol :: String -> Parser String
 symbol xs = token (string xs)
@@ -174,14 +183,6 @@ type CoreProgram = Program Name
 type ScDefn a = (Name,[a],Expr a)
 
 type CoreScDefn = ScDefn Name
-
-{-
-    Example: 
-        main = double 21;    ====\   [
-                             =====\   ("main", [], (EAp (EVar "double") (ENum 21))),
-                             =====/   ("double", ["x"], (EAp (EAp (EVar "+") (EVar "x")) (EVar "x"))) 
-        double x = x + x;    ====/  ]
--}
 
 type Name = String
 
@@ -217,15 +218,15 @@ parseProg = do p <- parseScDef
 
 -- parser per supercombinator
 parseScDef :: Parser (ScDefn Name)
-parseScDef = do v <- identifier
-                pf <- many identifier
+parseScDef = do v <- checkParseVar
+                pf <- many checkParseVar
                 char '='
                 body <- parseExpr
                 return (v, pf, body)
                 
 -- it is for the following cases: let, letrec, case, lambda and aexpr.
 parseExpr :: Parser (Expr Name)
-parseExpr = parseLet <|> parseLetRec <|> parseCase <|> parseLambda <|> parseAExpr
+parseExpr = parseLet <|> parseLetRec <|> parseCase <|> parseLambda <|> parseExpr1
 
 parseLet :: Parser (Expr Name) -- let is something like "let var1 = expr1; var2 = expr2; in expr0;"
 parseLet = do symbol "let"
@@ -241,6 +242,14 @@ parseLetRec = do symbol "letrec"
                  body <- parseExpr
                  return (ELet Recursive defns body)
 
+-- Parse a "Definition". It's used by parseLet and parseLetRec for Def (let and letrec).
+-- defn -> var = expr
+parseDef :: Parser (Def Name)
+parseDef = do x <- checkParseVar
+              symbol "="
+              expr <- parseAExpr
+              return (x, expr)
+
 parseCase :: Parser (Expr Name)
 parseCase = do symbol "case"
                e <- parseExpr
@@ -250,16 +259,83 @@ parseCase = do symbol "case"
 
 parseLambda :: Parser (Expr Name)   
 parseLambda = do symbol "\\"
-                 var <- some identifier
+                 var <- some checkParseVar
                  symbol "."
                  e <- parseExpr
                  return (ELam var e)
+
+parseMoreAlts :: Parser [(Alter Name)]
+parseMoreAlts = do alt <- parseAlt
+                   do symbol ";"
+                      remaining_alts <- parseMoreAlts
+                      return (alt:remaining_alts)
+                      <|>
+                      return [alt]
+
+-- used by parseMoreAlts
+parseAlt :: Parser (Alter Name)
+parseAlt = do symbol "<"
+              num <- integer
+              symbol ">"
+              var <- many checkParseVar
+              symbol "->"
+              e <- parseExpr
+              trace ("parseAlt "++(show e)) (return (num, var, e))
+
+parseExpr1 :: Parser (Expr Name)
+parseExpr1 = do left <- parseExpr2
+                do symbol "|"
+                   right <- parseExpr1
+                   return (EAp (EAp (EVar "|") left) right)
+                 <|> return left
+
+parseExpr2::Parser(Expr Name)
+parseExpr2 = do left <- parseExpr3
+                do symbol "&"
+                   right <- parseExpr2
+                   return (EAp (EAp (EVar "&") left) right)
+                 <|> return left
+
+parseExpr3::Parser(Expr Name)
+parseExpr3 = do left <- parseExpr4
+                do op <- parseRelOp
+                   right <- parseExpr4
+                   return (EAp (EAp (EVar op) left) right) 
+                 <|> return left
+
+-- used in parseExpr3
+parseRelOp :: Parser Name
+parseRelOp = symbol "<" <|> symbol "<=" <|> symbol "==" <|> symbol "~=" <|> symbol ">=" <|> symbol ">"
+
+parseExpr4::Parser(Expr Name)
+parseExpr4 = do left <- parseExpr5
+                do symbol "+"
+                   right <- parseExpr4
+                   return (EAp (EAp (EVar "+") left) right)
+                 <|> do symbol "-"
+                        right <- parseExpr5
+                        return (EAp (EAp (EVar "-") left) right)
+                 <|> return left
+
+parseExpr5::Parser(Expr Name)
+parseExpr5 = do left <- parseExpr6
+                do symbol "*"
+                   right <- parseExpr5
+                   return (EAp (EAp (EVar "*") left) right)
+                 <|> do symbol "/"
+                        right <- parseExpr6
+                        return (EAp (EAp (EVar "/") left) right)
+                 <|> return left
+
+parseExpr6 :: Parser (Expr Name)
+parseExpr6 = do x:xs <- some parseAExpr
+                return (foldl EAp x xs)
 
 parseAExpr :: Parser (Expr Name)
 parseAExpr = parseVar <|> parseNum <|> parsePack <|> parseParenthesisedExpr
 
 parseVar :: Parser (Expr Name)
-parseVar = do var <- identifier
+parseVar = do var <- checkParseVar
               return (EVar var)
 
 parseNum :: Parser (Expr Name)
@@ -281,83 +357,11 @@ parseParenthesisedExpr = do symbol "("
                             symbol ")"
                             return e
 
-parseMoreAlts :: Parser [(Alter Name)]
-parseMoreAlts = do alt <- parseAlt
-                   do symbol ";"
-                      remaining_alts <- parseMoreAlts
-                      return (alt:remaining_alts)
-                      <|>
-                      return [alt]
-
--- parser per il singolo alt, ritorna una tripla con numero, variabili ed espressione
-parseAlt :: Parser (Alter Name)
-parseAlt = do symbol "<"
-              num <- integer
-              symbol ">"
-              var <- many identifier
-              symbol "->"
-              e <- parseExpr
-              return (num, var, e)
-
-
--- Parse a "Definition". It's used by parseLet and parseLetRec for Def (let and letrec).
-parseDef :: Parser (Def Name)
-parseDef = do x <- identifier
-              symbol "="
-              expr <- parseExpr
-              do many (symbol ";")
-                 return (x,expr)
-
-parseExpr1 :: Parser (Expr Name)
-parseExpr1 = do left <- parseExpr2
-                do symbol "|"
-                   right <- parseExpr1
-                   return (EAp (EAp (EVar "|") left) right)
-                   <|> 
-                   return left 
-
-parseExpr2 :: Parser (Expr Name)
-parseExpr2 = do left <- parseExpr3
-                do symbol "&"
-                   right <- parseExpr2
-                   return (EAp (EAp (EVar "|") left) right)
-                   <|>
-                   return left
-
-parseExpr3 :: Parser (Expr Name)
-parseExpr3 = do left <- parseExpr4
-                do relop <- parseRelOp
-                   right <- parseExpr4
-                   return (EAp(EAp (EVar relop) left) right) 
-                   <|>
-                   return left
-
--- used in parseExpr3
-parseRelOp :: Parser Name
-parseRelOp = symbol "<" <|> symbol "<=" <|> symbol "==" <|> symbol "~=" <|> symbol ">=" <|> symbol ">"
-
-parseExpr4 :: Parser (Expr Name)
-parseExpr4 = do left <- parseExpr5
-                do symbol "+"
-                   right <- parseExpr4
-                   return (EAp (EAp (EVar "+") left) right)
-                   <|>
-                   do symbol "-"
-                      right <- parseExpr5
-                      return (EAp (EAp (EVar "-") left) right)
-                      <|> 
-                      return left
-
-parseExpr5 :: Parser (Expr Name)
-parseExpr5 = do left <- parseExpr6
-                do symbol "*"
-                   right <- parseExpr5
-                   return (EAp (EAp (EVar "*") left) right)
-                 <|> do symbol "/"
-                        right <- parseExpr6
-                        return (EAp(EAp (EVar "/") left) right)
-                 <|> return left
-
-parseExpr6 :: Parser (Expr Name)
-parseExpr6 = parseExpr5 -- TODO
-               
+isKeyWord :: String -> Bool
+isKeyWord "in" = True
+isKeyWord "of" = True
+isKeyWord "case" = True
+isKeyWord "let" = True
+isKeyWord "letrec" = True
+isKeyWord "Pack" = True
+isKeyWord _ = False
