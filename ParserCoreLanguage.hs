@@ -39,22 +39,6 @@ item = P (\inp -> case inp of
                     [] -> []
                     (x:xs) -> [(x,xs)])
 
-{--
--- it consumes three characters, discard the second, and returns the first and the third as a pair
-three :: Parser (Char,Char)
-three = pure g <*> item <*> item <*> item
-        where g x y z = (x,z)
---}
-
--- Monadic version
--- it consumes three characters, discard the second, and returns the first and the third as a pair
--- parse three "abcdef"  =  [(('a','c'),"def")]
-three :: Parser (Char,Char)
-three = do x <- item 
-           item
-           z <- item
-           return (x,z)
-
 {-- remind Maybe as an Alternative
     instance Alternative Maybe where 
         -- empty :: Maybe a
@@ -98,7 +82,6 @@ lower = sat isLower
 upper :: Parser Char
 upper = sat isUpper
 
--- check if the character is an alphabetic character
 letter :: Parser Char
 letter = sat isAlpha
 
@@ -137,29 +120,6 @@ token p = do space
              space 
              return v
 
-varch :: Parser Char
-varch = do alpha <- letter
-           return alpha
-        <|>
-        do numeral <- digit
-           return numeral
-        <|>
-        do underscore <- char '_'
-           return underscore
-
--- this is the actual variables parsing.
--- grammar: var -> alphaChar varch_1...varch_n
--- where varch_x is -> alpha | digit | _
-ident :: Parser Name
-ident = do x <- letter -- an alphabetic character
-           xs <- many varch -- alpha | digit | _
-           if isKeyWord (x:xs)
-            then empty
-            else return (x:xs)
-
-checkParseVar :: Parser Name
-checkParseVar = token ident
-
 natural :: Parser Int
 natural = token nat
 
@@ -172,7 +132,6 @@ integer = do token (char '-')
 symbol :: String -> Parser String
 symbol xs = token (string xs)
 
--- LET'S START WITH THE PARSER
 
 -- A core-language program is just a list of supercombinatoric definitions
 type Program a = [ScDefn a]
@@ -224,7 +183,7 @@ parseScDef = do v <- checkParseVar
                 body <- parseExpr
                 return (v, pf, body)
                 
--- it is for the following cases: let, letrec, case, lambda and aexpr.
+-- it is for the following cases: let, letrec, case, lambda, aexpr and infix binary application.
 parseExpr :: Parser (Expr Name)
 parseExpr = parseLet <|> parseLetRec <|> parseCase <|> parseLambda <|> parseExpr1
 
@@ -280,8 +239,9 @@ parseAlt = do symbol "<"
               var <- many checkParseVar
               symbol "->"
               e <- parseExpr
-              trace ("parseAlt "++(show e)) (return (num, var, e))
+              return (num, var, e)
 
+-- expr1 -> expr2 or expr1 | expr2
 parseExpr1 :: Parser (Expr Name)
 parseExpr1 = do left <- parseExpr2
                 do symbol "|"
@@ -289,14 +249,16 @@ parseExpr1 = do left <- parseExpr2
                    return (EAp (EAp (EVar "|") left) right)
                  <|> return left
 
-parseExpr2::Parser(Expr Name)
+-- expr2 -> expr3 & expr2 | expr3
+parseExpr2 :: Parser (Expr Name)
 parseExpr2 = do left <- parseExpr3
                 do symbol "&"
                    right <- parseExpr2
                    return (EAp (EAp (EVar "&") left) right)
                  <|> return left
 
-parseExpr3::Parser(Expr Name)
+-- expr3 -> expr4 relop expr4 | expr4
+parseExpr3 :: Parser (Expr Name)
 parseExpr3 = do left <- parseExpr4
                 do op <- parseRelOp
                    right <- parseExpr4
@@ -307,7 +269,8 @@ parseExpr3 = do left <- parseExpr4
 parseRelOp :: Parser Name
 parseRelOp = symbol "<" <|> symbol "<=" <|> symbol "==" <|> symbol "~=" <|> symbol ">=" <|> symbol ">"
 
-parseExpr4::Parser(Expr Name)
+-- expr4 -> expr5 + expr4 | expr5 - expr5 | expr5
+parseExpr4 :: Parser (Expr Name)
 parseExpr4 = do left <- parseExpr5
                 do symbol "+"
                    right <- parseExpr4
@@ -317,7 +280,8 @@ parseExpr4 = do left <- parseExpr5
                         return (EAp (EAp (EVar "-") left) right)
                  <|> return left
 
-parseExpr5::Parser(Expr Name)
+-- expr5 -> expr6 * expr5 | expr6 / expr6 | expr6
+parseExpr5 :: Parser (Expr Name)
 parseExpr5 = do left <- parseExpr6
                 do symbol "*"
                    right <- parseExpr5
@@ -327,6 +291,7 @@ parseExpr5 = do left <- parseExpr6
                         return (EAp (EAp (EVar "/") left) right)
                  <|> return left
 
+-- aexpr6 -> aexpr_1...aexpr_n
 parseExpr6 :: Parser (Expr Name)
 parseExpr6 = do x:xs <- some parseAExpr
                 return (foldl EAp x xs)
@@ -357,6 +322,19 @@ parseParenthesisedExpr = do symbol "("
                             symbol ")"
                             return e
 
+checkParseVar :: Parser Name
+checkParseVar = token ident
+
+-- this is the actual variables parsing.
+-- grammar: var -> alphaChar varch_1...varch_n
+-- where varch_x is -> alphaChar | digit | _
+ident :: Parser Name
+ident = do x <- letter -- an alphabetic character
+           xs <- many varch -- alpha | digit | _
+           if isKeyWord (x:xs)
+            then empty
+            else return (x:xs)
+
 isKeyWord :: String -> Bool
 isKeyWord "in" = True
 isKeyWord "of" = True
@@ -365,3 +343,13 @@ isKeyWord "let" = True
 isKeyWord "letrec" = True
 isKeyWord "Pack" = True
 isKeyWord _ = False
+
+varch :: Parser Char
+varch = do alpha <- letter
+           return alpha
+        <|>
+        do numeral <- digit
+           return numeral
+        <|>
+        do underscore <- char '_'
+           return underscore
