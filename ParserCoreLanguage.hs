@@ -335,15 +335,6 @@ ident = do x <- letter -- an alphabetic character
             then empty
             else return (x:xs)
 
-isKeyWord :: String -> Bool
-isKeyWord "in" = True
-isKeyWord "of" = True
-isKeyWord "case" = True
-isKeyWord "let" = True
-isKeyWord "letrec" = True
-isKeyWord "Pack" = True
-isKeyWord _ = False
-
 varch :: Parser Char
 varch = do alpha <- letter
            return alpha
@@ -353,3 +344,12 @@ varch = do alpha <- letter
         <|>
         do underscore <- char '_'
            return underscore
+
+isKeyWord :: String -> Bool
+isKeyWord "in" = True
+isKeyWord "of" = True
+isKeyWord "case" = True
+isKeyWord "let" = True
+isKeyWord "letrec" = True
+isKeyWord "Pack" = True
+isKeyWord _ = False
