@@ -1,9 +1,2 @@
 f = 3;
-k= -5;
-sum x= \y . x+y;
-f g = funz (4 /-5) |5;
-u= Pack {9,8};
-g6 x y = let z = 8 in z;
-h x = case (h g) of
- <1 > a_ -> 2 +1;
-<2 > t1 t2 -> e < u
+g x y = f x
