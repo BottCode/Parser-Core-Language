@@ -167,7 +167,7 @@ data Expr a = EVar Name
             | ELam [a] (Expr a)
             deriving Show
 
--- parser per progamma
+-- parser for program
 parseProg :: Parser (Program Name)
 parseProg = do p <- parseScDef
                do symbol ";"
@@ -175,7 +175,7 @@ parseProg = do p <- parseScDef
                   return (p:ps)
                   <|> return [p]
 
--- parser per supercombinator
+-- parser for supercombinator
 parseScDef :: Parser (ScDefn Name)
 parseScDef = do v <- checkParseVar
                 pf <- many checkParseVar
@@ -206,7 +206,7 @@ parseLetRec = do symbol "letrec"
 parseDef :: Parser (Def Name)
 parseDef = do x <- checkParseVar
               symbol "="
-              expr <- parseAExpr
+              expr <- parseExpr
               return (x, expr)
 
 parseCase :: Parser (Expr Name)
@@ -265,10 +265,6 @@ parseExpr3 = do left <- parseExpr4
                    return (EAp (EAp (EVar op) left) right) 
                  <|> return left
 
--- used in parseExpr3
-parseRelOp :: Parser Name
-parseRelOp = symbol "<" <|> symbol "<=" <|> symbol "==" <|> symbol "~=" <|> symbol ">=" <|> symbol ">"
-
 -- expr4 -> expr5 + expr4 | expr5 - expr5 | expr5
 parseExpr4 :: Parser (Expr Name)
 parseExpr4 = do left <- parseExpr5
@@ -296,6 +292,10 @@ parseExpr6 :: Parser (Expr Name)
 parseExpr6 = do x:xs <- some parseAExpr
                 return (foldl EAp x xs)
 
+-- used in parseExpr3
+parseRelOp :: Parser Name
+parseRelOp = symbol "<" <|> symbol "<=" <|> symbol "==" <|> symbol "~=" <|> symbol ">=" <|> symbol ">"
+                
 parseAExpr :: Parser (Expr Name)
 parseAExpr = parseVar <|> parseNum <|> parsePack <|> parseParenthesisedExpr
 
