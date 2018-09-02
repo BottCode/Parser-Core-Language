@@ -180,8 +180,8 @@ parseScDef :: Parser (ScDefn Name)
 parseScDef = do v <- checkParseVar
                 pf <- many checkParseVar
                 char '='
-                body <- parseExpr
-                return (v, pf, body)
+                e <- parseExpr
+                return (v, pf, e)
                 
 -- it is for the following cases: let, letrec, case, lambda, aexpr and infix binary application.
 parseExpr :: Parser (Expr Name)
@@ -198,8 +198,8 @@ parseLetRec :: Parser (Expr Name)
 parseLetRec = do symbol "letrec"
                  defns <- some parseDef
                  symbol "in"
-                 body <- parseExpr
-                 return (ELet Recursive defns body)
+                 e <- parseExpr
+                 return (ELet Recursive defns e)
 
 -- Parse a "Definition". It's used by parseLet and parseLetRec for Def (let and letrec).
 -- defn -> var = expr
