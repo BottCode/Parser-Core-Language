@@ -189,17 +189,25 @@ parseExpr = parseLet <|> parseLetRec <|> parseCase <|> parseLambda <|> parseExpr
 
 parseLet :: Parser (Expr Name) -- let is something like "let var1 = expr1; var2 = expr2; in expr0;"
 parseLet = do symbol "let"
-              defns <- some parseDef 
+              defns <- parseMoreDefns 
               symbol "in"
               e <- parseExpr
               return (ELet NonRecursive defns e)
 
 parseLetRec :: Parser (Expr Name)
 parseLetRec = do symbol "letrec"
-                 defns <- some parseDef
+                 defns <- parseMoreDefns
                  symbol "in"
                  e <- parseExpr
                  return (ELet Recursive defns e)
+
+parseMoreDefns :: Parser [(Def Name)]
+parseMoreDefns = do def <- parseDef
+                    do symbol ";"
+                       remaining_defns <- parseMoreDefns
+                       return (def:remaining_defns)
+                       <|>
+                       return [def]
 
 -- Parse a "Definition". It's used by parseLet and parseLetRec for Def (let and letrec).
 -- defn -> var = expr
@@ -216,13 +224,6 @@ parseCase = do symbol "case"
                alts <- parseMoreAlts
                return (ECase e alts)
 
-parseLambda :: Parser (Expr Name)   
-parseLambda = do symbol "\\"
-                 var <- some checkParseVar
-                 symbol "."
-                 e <- parseExpr
-                 return (ELam var e)
-
 parseMoreAlts :: Parser [(Alter Name)]
 parseMoreAlts = do alt <- parseAlt
                    do symbol ";"
@@ -236,10 +237,17 @@ parseAlt :: Parser (Alter Name)
 parseAlt = do symbol "<"
               num <- integer
               symbol ">"
-              var <- many checkParseVar
+              vars <- many checkParseVar
               symbol "->"
               e <- parseExpr
-              return (num, var, e)
+              return (num, vars, e)
+
+parseLambda :: Parser (Expr Name)   
+parseLambda = do symbol "\\"
+                 vars <- some checkParseVar
+                 symbol "."
+                 e <- parseExpr
+                 return (ELam vars e)
 
 -- expr1 -> expr2 or expr1 | expr2
 parseExpr1 :: Parser (Expr Name)
